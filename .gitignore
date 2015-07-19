@@ -27,6 +27,15 @@
 *.i*86
 *.x86_64
 *.hex
+*.bin
 
 # Debug files
 *.dSYM/
+
+# Build artefacts
+*.map
+*.lst
+
+# Eclipse CDT project files
+.cproject
+.project
