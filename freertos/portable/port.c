@@ -1,5 +1,5 @@
 /*
-    FreeRTOS V8.2.1 - Copyright (C) 2015 Real Time Engineers Ltd.
+    FreeRTOS V8.2.3 - Copyright (C) 2015 Real Time Engineers Ltd.
     All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
@@ -8,7 +8,7 @@
 
     FreeRTOS is free software; you can redistribute it and/or modify it under
     the terms of the GNU General Public License (version 2) as published by the
-    Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
+    Free Software Foundation >>>> AND MODIFIED BY <<<< the FreeRTOS exception.
 
     ***************************************************************************
     >>!   NOTE: The modification to the GPL is included to allow you to     !<<
@@ -68,15 +68,18 @@
 */
 
 /*-----------------------------------------------------------
- * Implementation of functions defined in portable.h for the ARM CM4F port.
+ * Implementation of functions defined in portable.h for the ARM CM3 port.
  *----------------------------------------------------------*/
 
 /* Scheduler includes. */
 #include "FreeRTOS.h"
 #include "task.h"
 
-#ifndef __VFP_FP__
-	#error This port can only be used when the project options are configured to enable hardware floating point support.
+/* For backward compatibility, ensure configKERNEL_INTERRUPT_PRIORITY is
+defined.  The value should also ensure backward compatibility.
+FreeRTOS.org versions prior to V4.4.0 did not include this definition. */
+#ifndef configKERNEL_INTERRUPT_PRIORITY
+	#define configKERNEL_INTERRUPT_PRIORITY 255
 #endif
 
 #ifndef configSYSTICK_CLOCK_HZ
@@ -101,12 +104,6 @@
 #define portNVIC_PENDSVCLEAR_BIT 			( 1UL << 27UL )
 #define portNVIC_PEND_SYSTICK_CLEAR_BIT		( 1UL << 25UL )
 
-/* Constants used to detect a Cortex-M7 r0p1 core, which should use the ARM_CM7
-r0p1 port. */
-#define portCPUID							( * ( ( volatile uint32_t * ) 0xE000ed00 ) )
-#define portCORTEX_M7_r0p1_ID				( 0x410FC271UL )
-#define portCORTEX_M7_r0p0_ID				( 0x410FC270UL )
-
 #define portNVIC_PENDSV_PRI					( ( ( uint32_t ) configKERNEL_INTERRUPT_PRIORITY ) << 16UL )
 #define portNVIC_SYSTICK_PRI				( ( ( uint32_t ) configKERNEL_INTERRUPT_PRIORITY ) << 24UL )
 
@@ -123,13 +120,8 @@ r0p1 port. */
 /* Masks off all bits but the VECTACTIVE bits in the ICSR register. */
 #define portVECTACTIVE_MASK					( 0xFFUL )
 
-/* Constants required to manipulate the VFP. */
-#define portFPCCR							( ( volatile uint32_t * ) 0xe000ef34 ) /* Floating point context control register. */
-#define portASPEN_AND_LSPEN_BITS			( 0x3UL << 30UL )
-
 /* Constants required to set up the initial stack. */
-#define portINITIAL_XPSR					( 0x01000000 )
-#define portINITIAL_EXEC_RETURN				( 0xfffffffd )
+#define portINITIAL_XPSR					( 0x01000000UL )
 
 /* The systick is a 24-bit counter. */
 #define portMAX_24_BIT_NUMBER				( 0xffffffUL )
@@ -140,7 +132,7 @@ calculations. */
 #define portMISSED_COUNTS_FACTOR			( 45UL )
 
 /* Let the user override the pre-loading of the initial LR with the address of
-prvTaskExitError() in case is messes up unwinding of the stack in the
+prvTaskExitError() in case it messes up unwinding of the stack in the
 debugger. */
 #ifdef configTASK_RETURN_ADDRESS
 	#define portTASK_RETURN_ADDRESS	configTASK_RETURN_ADDRESS
@@ -170,11 +162,6 @@ void vPortSVCHandler( void ) __attribute__ (( naked ));
  * Start first task is a separate function so it can be tested in isolation.
  */
 static void prvPortStartFirstTask( void ) __attribute__ (( naked ));
-
-/*
- * Function to enable the VFP.
- */
- static void vPortEnableVFP( void ) __attribute__ (( naked ));
 
 /*
  * Used to catch tasks that attempt to return from their implementing function.
@@ -226,26 +213,14 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
 {
 	/* Simulate the stack frame as it would be created by a context switch
 	interrupt. */
-
-	/* Offset added to account for the way the MCU uses the stack on entry/exit
-	of interrupts, and to ensure alignment. */
-	pxTopOfStack--;
-
+	pxTopOfStack--; /* Offset added to account for the way the MCU uses the stack on entry/exit of interrupts. */
 	*pxTopOfStack = portINITIAL_XPSR;	/* xPSR */
 	pxTopOfStack--;
 	*pxTopOfStack = ( StackType_t ) pxCode;	/* PC */
 	pxTopOfStack--;
 	*pxTopOfStack = ( StackType_t ) portTASK_RETURN_ADDRESS;	/* LR */
-
-	/* Save code space by skipping register initialisation. */
 	pxTopOfStack -= 5;	/* R12, R3, R2 and R1. */
 	*pxTopOfStack = ( StackType_t ) pvParameters;	/* R0 */
-
-	/* A save method is being used that requires each task to maintain its
-	own exec return value. */
-	pxTopOfStack--;
-	*pxTopOfStack = portINITIAL_EXEC_RETURN;
-
 	pxTopOfStack -= 8;	/* R11, R10, R9, R8, R7, R6, R5 and R4. */
 
 	return pxTopOfStack;
@@ -272,11 +247,12 @@ void vPortSVCHandler( void )
 					"	ldr	r3, pxCurrentTCBConst2		\n" /* Restore the context. */
 					"	ldr r1, [r3]					\n" /* Use pxCurrentTCBConst to get the pxCurrentTCB address. */
 					"	ldr r0, [r1]					\n" /* The first item in pxCurrentTCB is the task top of stack. */
-					"	ldmia r0!, {r4-r11, r14}		\n" /* Pop the registers that are not automatically saved on exception entry and the critical nesting count. */
+					"	ldmia r0!, {r4-r11}				\n" /* Pop the registers that are not automatically saved on exception entry and the critical nesting count. */
 					"	msr psp, r0						\n" /* Restore the task stack pointer. */
 					"	isb								\n"
 					"	mov r0, #0 						\n"
 					"	msr	basepri, r0					\n"
+					"	orr r14, #0xd					\n"
 					"	bx r14							\n"
 					"									\n"
 					"	.align 2						\n"
@@ -310,12 +286,6 @@ BaseType_t xPortStartScheduler( void )
 	/* configMAX_SYSCALL_INTERRUPT_PRIORITY must not be set to 0.
 	See http://www.FreeRTOS.org/RTOS-Cortex-M3-M4.html */
 	configASSERT( configMAX_SYSCALL_INTERRUPT_PRIORITY );
-
-	/* This port can be used on all revisions of the Cortex-M7 core other than
-	the r0p1 parts.  r0p1 parts should use the port from the
-	/source/portable/GCC/ARM_CM7/r0p1 directory. */
-	configASSERT( portCPUID != portCORTEX_M7_r0p1_ID );
-	configASSERT( portCPUID != portCORTEX_M7_r0p0_ID );
 
 	#if( configASSERT_DEFINED == 1 )
 	{
@@ -372,12 +342,6 @@ BaseType_t xPortStartScheduler( void )
 	/* Initialise the critical nesting count ready for the first task. */
 	uxCriticalNesting = 0;
 
-	/* Ensure the VFP is enabled - it should be anyway. */
-	vPortEnableVFP();
-
-	/* Lazy save always. */
-	*( portFPCCR ) |= portASPEN_AND_LSPEN_BITS;
-
 	/* Start the first task. */
 	prvPortStartFirstTask();
 
@@ -400,13 +364,27 @@ void vPortEndScheduler( void )
 }
 /*-----------------------------------------------------------*/
 
+void vPortYield( void )
+{
+	/* Set a PendSV to request a context switch. */
+	portNVIC_INT_CTRL_REG = portNVIC_PENDSVSET_BIT;
+
+	/* Barriers are normally not required but do ensure the code is completely
+	within the specified behaviour for the architecture. */
+	__asm volatile( "dsb" );
+	__asm volatile( "isb" );
+}
+/*-----------------------------------------------------------*/
+
 void vPortEnterCritical( void )
 {
 	portDISABLE_INTERRUPTS();
 	uxCriticalNesting++;
-
+	__asm volatile( "dsb" );
+	__asm volatile( "isb" );
+	
 	/* This is not the interrupt safe version of the enter critical function so
-	assert() if it is being called from an interrupt context.  Only API
+	assert() if it is being called from an interrupt context.  Only API 
 	functions that end in "FromISR" can be used in an interrupt.  Only assert if
 	the critical nesting count is 1 to protect against recursive calls if the
 	assert function also uses a critical section. */
@@ -428,6 +406,37 @@ void vPortExitCritical( void )
 }
 /*-----------------------------------------------------------*/
 
+__attribute__(( naked )) uint32_t ulPortSetInterruptMask( void )
+{
+	__asm volatile														\
+	(																	\
+		"	mrs r0, basepri											\n" \
+		"	mov r1, %0												\n"	\
+		"	msr basepri, r1											\n" \
+		"	bx lr													\n" \
+		:: "i" ( configMAX_SYSCALL_INTERRUPT_PRIORITY ) : "r0", "r1"	\
+	);
+
+	/* This return will not be reached but is necessary to prevent compiler
+	warnings. */
+	return 0;
+}
+/*-----------------------------------------------------------*/
+
+__attribute__(( naked )) void vPortClearInterruptMask( uint32_t ulNewMaskValue )
+{
+	__asm volatile													\
+	(																\
+		"	msr basepri, r0										\n"	\
+		"	bx lr												\n" \
+		:::"r0"														\
+	);
+
+	/* Just to avoid compiler warnings. */
+	( void ) ulNewMaskValue;
+}
+/*-----------------------------------------------------------*/
+
 void xPortPendSVHandler( void )
 {
 	/* This is a naked function. */
@@ -440,43 +449,22 @@ void xPortPendSVHandler( void )
 	"	ldr	r3, pxCurrentTCBConst			\n" /* Get the location of the current TCB. */
 	"	ldr	r2, [r3]						\n"
 	"										\n"
-	"	tst r14, #0x10						\n" /* Is the task using the FPU context?  If so, push high vfp registers. */
-	"	it eq								\n"
-	"	vstmdbeq r0!, {s16-s31}				\n"
-	"										\n"
-	"	stmdb r0!, {r4-r11, r14}			\n" /* Save the core registers. */
-	"										\n"
+	"	stmdb r0!, {r4-r11}					\n" /* Save the remaining registers. */
 	"	str r0, [r2]						\n" /* Save the new top of stack into the first member of the TCB. */
 	"										\n"
-	"	stmdb sp!, {r3}						\n"
-	"	mov r0, %0 							\n"
+	"	stmdb sp!, {r3, r14}				\n"
+	"	mov r0, %0							\n"
 	"	msr basepri, r0						\n"
-	"	dsb									\n"
-	"   isb									\n"
 	"	bl vTaskSwitchContext				\n"
 	"	mov r0, #0							\n"
 	"	msr basepri, r0						\n"
-	"	ldmia sp!, {r3}						\n"
-	"										\n"
-	"	ldr r1, [r3]						\n" /* The first item in pxCurrentTCB is the task top of stack. */
-	"	ldr r0, [r1]						\n"
-	"										\n"
-	"	ldmia r0!, {r4-r11, r14}			\n" /* Pop the core registers. */
-	"										\n"
-	"	tst r14, #0x10						\n" /* Is the task using the FPU context?  If so, pop the high vfp registers too. */
-	"	it eq								\n"
-	"	vldmiaeq r0!, {s16-s31}				\n"
-	"										\n"
+	"	ldmia sp!, {r3, r14}				\n"
+	"										\n"	/* Restore the context, including the critical nesting count. */
+	"	ldr r1, [r3]						\n"
+	"	ldr r0, [r1]						\n" /* The first item in pxCurrentTCB is the task top of stack. */
+	"	ldmia r0!, {r4-r11}					\n" /* Pop the registers. */
 	"	msr psp, r0							\n"
 	"	isb									\n"
-	"										\n"
-	#ifdef WORKAROUND_PMU_CM001 /* XMC4000 specific errata workaround. */
-		#if WORKAROUND_PMU_CM001 == 1
-	"			push { r14 }				\n"
-	"			pop { pc }					\n"
-		#endif
-	#endif
-	"										\n"
 	"	bx r14								\n"
 	"										\n"
 	"	.align 2							\n"
@@ -679,21 +667,6 @@ __attribute__(( weak )) void vPortSetupTimerInterrupt( void )
 }
 /*-----------------------------------------------------------*/
 
-/* This is a naked function. */
-static void vPortEnableVFP( void )
-{
-	__asm volatile
-	(
-		"	ldr.w r0, =0xE000ED88		\n" /* The FPU enable bits are in the CPACR. */
-		"	ldr r1, [r0]				\n"
-		"								\n"
-		"	orr r1, r1, #( 0xf << 20 )	\n" /* Enable CP10 and CP11 coprocessors, then save back. */
-		"	str r1, [r0]				\n"
-		"	bx r14						"
-	);
-}
-/*-----------------------------------------------------------*/
-
 #if( configASSERT_DEFINED == 1 )
 
 	void vPortValidateInterruptPriority( void )
@@ -753,5 +726,24 @@ static void vPortEnableVFP( void )
 	}
 
 #endif /* configASSERT_DEFINED */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

@@ -27,8 +27,7 @@ _top_stack = (0x1fff8000+64K);	    /* calc top of stack */
 /*
  *  Define the amount of heap space to reserve.
  */
-TOTAL_RESERVED_HEAP = 30K;
-
+TOTAL_RESERVED_HEAP = 8K;
 
 EXTERN(__interrupt_vector_table);
 
@@ -143,13 +142,7 @@ SECTIONS
 		. = ALIGN(4);
 		PROVIDE(_endHeap = .);
 	} > sram
-/*
 
-	.heap (NOLOAD) : {
-		. = ALIGN(4);
-		*(.heapsection)
-	} > sram
-*/
 
 	/* Linker wants .eh_frame section defined because of gcc 4.4.X bug,
 	 * just discard it here. */

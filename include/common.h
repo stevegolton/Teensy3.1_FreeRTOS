@@ -23,7 +23,7 @@
 
 
 #include  <stdint.h>
-#include  "mk20d7.h"
+#include  "MK20D7.h"
 
 /*
  *  Define characteristics of the target platform.

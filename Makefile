@@ -13,26 +13,33 @@ CPU = cortex-m4
 OBJECTS	= main.o \
 	      sysinit.o \
 	      crt0.o \
-	      
+	      freertos/portable/port.o \
+	      freertos/croutine.o \
+	      freertos/event_groups.o \
+	      freertos/list.o \
+	      freertos/queue.o \
+	      freertos/tasks.o \
+	      freertos/timers.o \
+	      freertos/heap_2.o \
 
 #  Select the toolchain by providing a path to the top level
 #  directory; this will be the folder that holds the
 #  arm-none-eabi subfolders.
-TOOLPATH = C:/Programs/GNUToolsARMEmbedded/4.72012q4
+TOOLPATH = 
 
 #  Provide a base path to your Teensy firmware release folder.
 #  This is the folder containing all of the Teensy source and
 #  include folders.  For example, you would expand any Freescale
 #  example folders (such as common or include) and place them
 #  here.
-TEENSY3X_BASEPATH = C:/Dropbox/Embedded/Teensy3xBlinky
+TEENSY3X_BASEPATH = .
 
 #
 #  Select the target type.  This is typically arm-none-eabi.
 #  If your toolchain supports other targets, those target
 #  folders should be at the same level in the toolchain as
 #  the arm-none-eabi folders.
-TARGETTYPE = arm-none-eabi
+TARGETTYPE = /usr/lib/arm-none-eabi/lib/thumb
 
 #  Describe the various include and source directories needed.
 #  These usually point to files from whatever distribution
@@ -40,6 +47,7 @@ TARGETTYPE = arm-none-eabi
 #  include paths to any needed GCC includes or libraries.
 TEENSY3X_INC     = $(TEENSY3X_BASEPATH)/include
 GCC_INC          = $(TOOLPATH)/$(TARGETTYPE)/include
+
 
 #  All possible source directories other than '.' must be defined in
 #  the VPATH variable.  This lets make tell the compiler where to find
@@ -52,6 +60,9 @@ VPATH = $(TEENSY3X_BASEPATH)/common
 INCDIRS  = -I$(GCC_INC)
 INCDIRS += -I$(TEENSY3X_INC)
 INCDIRS += -I.
+INCDIRS += -I./freertos/include
+INCDIRS += -I./freertos/portable
+
 
 # Name and path to the linker script
 LSCRIPT = $(TEENSY3X_BASEPATH)/common/Teensy31_flash.ld
@@ -62,9 +73,8 @@ DEBUG = -g
 
 #  List the directories to be searched for libraries during linking.
 #  Optionally, list archives (libxxx.a) to be included during linking. 
-LIBDIRS  = -L$(TOOLPATH)/$(TARGETTYPE)/lib/thumb
-LIBS = -lstdc++ -lsupc++ -lm -lc -lnosys
-#LIBS = 
+LIBDIRS  = -L/usr/lib/arm-none-eabi/lib/thumb
+LIBS = -lc
 
 #  Compiler options
 GCFLAGS = -Wall -fno-common -mcpu=$(CPU) -mthumb -O$(OPTIMIZATION) $(DEBUG)
@@ -87,7 +97,7 @@ ASFLAGS = -mcpu=$(CPU)
 
 #  Linker options
 LDFLAGS  = -nostdlib -nostartfiles -Map=$(PROJECT).map -T$(LSCRIPT)
-#LDFLAGS  = -T$(LSCRIPT) -nostartfiles -v -g -mthumb -mcpu=$(CPU)
+LDFLAGS += --cref
 LDFLAGS += $(LIBDIRS)
 LDFLAGS += $(LIBS)
 
@@ -98,15 +108,15 @@ LDFLAGS += $(LIBS)
 #  If you are ABSOLUTELY sure that your PATH variable is
 #  set properly, you can remove the BINDIR variable.
 #
-BINDIR = $(TOOLPATH)/bin
 
-CC = $(BINDIR)/arm-none-eabi-gcc
-AS = $(BINDIR)/arm-none-eabi-as
-AR = $(BINDIR)/arm-none-eabi-ar
-LD = $(BINDIR)/arm-none-eabi-ld
-OBJCOPY = $(BINDIR)/arm-none-eabi-objcopy
-SIZE = $(BINDIR)/arm-none-eabi-size
-OBJDUMP = $(BINDIR)/arm-none-eabi-objdump
+
+CC = arm-none-eabi-gcc
+AS = arm-none-eabi-as
+AR = arm-none-eabi-ar
+LD = arm-none-eabi-ld
+OBJCOPY = arm-none-eabi-objcopy
+SIZE = arm-none-eabi-size
+OBJDUMP = arm-none-eabi-objdump
 
 #  Define a command for removing folders and files during clean.  The
 #  simplest such command is Linux' rm with the -f option.  You can find
@@ -125,7 +135,7 @@ $(PROJECT).hex: $(PROJECT).elf
 
 #  Linker invocation
 $(PROJECT).elf: $(OBJECTS)
-	$(LD) $(OBJECTS) $(LDFLAGS) -o $(PROJECT).elf $(LIBDIRS) $(LIBS)
+	$(LD) $(OBJECTS) $(LDFLAGS) -o $(PROJECT).elf
 
 stats: $(PROJECT).elf
 	$(SIZE) $(PROJECT).elf
@@ -135,6 +145,8 @@ dump: $(PROJECT).elf
 
 clean:
 	$(REMOVE) *.o
+	$(REMOVE) freertos/*.o
+	$(REMOVE) freertos/portable/*.o
 	$(REMOVE) $(PROJECT).hex
 	$(REMOVE) $(PROJECT).elf
 	$(REMOVE) $(PROJECT).map
@@ -167,15 +179,13 @@ toolvers:
 #  so Visual Studio's IntelliSense feature can track back to the source
 #  file with the error.
 .c.o :
-	@echo ---- Compiling $<, writing to $@ ----
-	$(CC) $(GCFLAGS) -c $< -o $@ > $(basename $@).lst
-#	$(CC) $(GCFLAGS) -c $< -o $@ 2>&1 | sed -e 's/\(\w\+\):\([0-9]\+\):/\1(\2):/'
-	@echo ""
+	@echo Compiling $<, writing to $@...
+#	$(CC) $(GCFLAGS) -c $< -o $@ > $(basename $@).lst
+	$(CC) $(GCFLAGS) -c $< -o $@ 2>&1 | sed -e 's/\(\w\+\):\([0-9]\+\):/\1(\2):/'
     
 .cpp.o :
-	@echo ---- Compiling $<, writing to $@ ----
+	@echo Compiling $<, writing to $@...
 	$(CC) $(GCFLAGS) -c $<
-	@echo ""
 
 #  There are two options for assembling .s files to .o; uncomment only one.
 #  The shorter option is suitable for making from the command-line.
@@ -184,8 +194,7 @@ toolvers:
 #  so Visual Studio's IntelliSense feature can track back to the source
 #  file with the error.
 .s.o :
-	@echo Assembling $<, writing to $@ ----
-	$(AS) $(ASFLAGS) -o $@ $<  > $(basename $@).lst
-	@echo ""
-#	$(AS) $(ASFLAGS) -o $@ $<  2>&1 | sed -e 's/\(\w\+\):\([0-9]\+\):/\1(\2):/'
+	@echo Assembling $<, writing to $@...
+#	$(AS) $(ASFLAGS) -o $@ $<  > $(basename $@).lst
+	$(AS) $(ASFLAGS) -o $@ $<  2>&1 | sed -e 's/\(\w\+\):\([0-9]\+\):/\1(\2):/'
 #########################################################################

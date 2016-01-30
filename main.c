@@ -1,6 +1,9 @@
 #include "common.h"
 #include "string.h"
 
+#include "FreeRTOS.h"
+#include "timers.h"
+
 #define FTM_FC_PS_DIV_1 0
 #define FTM_FC_PS_DIV_2 1
 #define FTM_FC_PS_DIV_4 2
@@ -18,6 +21,8 @@ __inline__ void dumbdelay_ms( const uint32_t ms );
 void HardFault_Handler();
 void initPWM( void );
 void initFreeRTOS();
+
+//#define configASSERT( x )     if( ( x ) == 0 ) { taskDISABLE_INTERRUPTS(); for( ;; ); }
 
 /* ************************************************************************** */
 int main( void )
@@ -176,6 +181,7 @@ void initPWM(void)
 	 FTM0_SC = ( FTM_SC_CLKS( 0x01 ) | FTM_SC_PS( FTM_FC_PS_DIV_4 ) ); /* Set up status and control register */
 }
 
+#if 0
 /* ************************************************************************** */
 /*!
  * \brief		Initialises FreeRTOS.
@@ -185,32 +191,155 @@ void initFreeRTOS()
 	// Nothing for now...
 }
 
-#if 0
+#endif
+
+#if 1
+
+#define mainBUTTON_LED_TIMER_PERIOD_MS		( 500UL / portTICK_PERIOD_MS )
+
+static TimerHandle_t xButtonLEDTimer = NULL;
+
+static int i = 0;
+
+static void prvButtonLEDTimerCallback( TimerHandle_t xTimer )
+{
+	if ( 1 == i )
+	{
+		i = 0;
+		GPIOC_PSOR = ( 1 << 5 );
+	}
+	else
+	{
+		i = 1;
+		GPIOC_PCOR = ( 1 << 5 );
+	}
+}
+
+static void sometask( void *pvParameters )
+{
+	int index;
+
+	xTimerStart( xButtonLEDTimer, 0 );
+
+	for (;;)
+	{
+		//GPIOC_PSOR = ( 1 << 5 );
+		//dumbdelay_ms( 500 );
+		//GPIOC_PCOR = ( 1 << 5 );
+		//dumbdelay_ms( 500 );
+	}
+}
+
 /* ************************************************************************** */
 /*!
  * \brief		Initializes FreeRTOS.
  */
 void initFreeRTOS()
 {
-	if( xQueue != NULL )
-	{
-		/* Start the two tasks as described in the comments at the top of this
-		file. */
-		xTaskCreate( prvQueueReceiveTask, "Rx", configMINIMAL_STACK_SIZE, NULL, mainQUEUE_RECEIVE_TASK_PRIORITY, NULL );
-		xTaskCreate( prvQueueSendTask, "TX", configMINIMAL_STACK_SIZE, NULL, mainQUEUE_SEND_TASK_PRIORITY, NULL );
+	// Configure "LED" pin
+	PORTC_PCR5 = PORT_PCR_MUX(0x1); // LED is on PC5 (pin 13), config as GPIO (alt = 1)
+	GPIOC_PDDR = (1<<5);			// make this an output pin
 
-		/* Create the software timer that is responsible for turning off the LED
-		if the button is not pushed within 5000ms, as described at the top of
-		this file. */
-		xButtonLEDTimer = xTimerCreate( "ButtonLEDTimer", 			/* A text name, purely to help debugging. */
+	xButtonLEDTimer = xTimerCreate( "LEDtmr", 						/* A text name, purely to help debugging. */
 									mainBUTTON_LED_TIMER_PERIOD_MS,	/* The timer period, in this case 5000ms (5s). */
-									pdFALSE,						/* This is a one shot timer, so xAutoReload is set to pdFALSE. */
+									pdTRUE,						/* This is a one shot timer, so xAutoReload is set to pdFALSE. */
 									( void * ) 0,					/* The ID is not used, so can be set to anything. */
 									prvButtonLEDTimerCallback		/* The callback function that switches the LED off. */
-								);
+							);
 
-		/* Start the tasks and timer running. */
-		vTaskStartScheduler();
-	}
+	xTaskCreate( sometask, "Task", configMINIMAL_STACK_SIZE, NULL, 0, NULL );
+
+	/* Start the tasks and timer running. */
+	vTaskStartScheduler();
 }
+
+/*
+** ===================================================================
+**     Event       :  FRTOS1_vApplicationStackOverflowHook (module Events)
+**
+**     Component   :  FRTOS1 [FreeRTOS]
+**     Description :
+**         if enabled, this hook will be called in case of a stack
+**         overflow.
+**     Parameters  :
+**         NAME            - DESCRIPTION
+**         pxTask          - Task handle
+**       * pcTaskName      - Pointer to task name
+**     Returns     : Nothing
+** ===================================================================
+*/
+void vApplicationStackOverflowHook(xTaskHandle pxTask, char *pcTaskName)
+{
+  /* This will get called if a stack overflow is detected during the context
+     switch.  Set configCHECK_FOR_STACK_OVERFLOWS to 2 to also check for stack
+     problems within nested interrupts, but only do this for debug purposes as
+     it will increase the context switch time. */
+  (void)pxTask;
+  (void)pcTaskName;
+  taskDISABLE_INTERRUPTS();
+  /* Write your code here ... */
+  for(;;) {}
+}
+
+/*
+** ===================================================================
+**     Event       :  FRTOS1_vApplicationTickHook (module Events)
+**
+**     Component   :  FRTOS1 [FreeRTOS]
+**     Description :
+**         If enabled, this hook will be called by the RTOS for every
+**         tick increment.
+**     Parameters  : None
+**     Returns     : Nothing
+** ===================================================================
+*/
+void vApplicationTickHook(void)
+{
+  /* Called for every RTOS tick. */
+  /* Write your code here ... */
+}
+
+/*
+** ===================================================================
+**     Event       :  FRTOS1_vApplicationIdleHook (module Events)
+**
+**     Component   :  FRTOS1 [FreeRTOS]
+**     Description :
+**         If enabled, this hook will be called when the RTOS is idle.
+**         This might be a good place to go into low power mode.
+**     Parameters  : None
+**     Returns     : Nothing
+** ===================================================================
+*/
+void vApplicationIdleHook(void)
+{
+  /* Called whenever the RTOS is idle (from the IDLE task).
+     Here would be a good place to put the CPU into low power mode. */
+  /* Write your code here ... */
+}
+
+/*
+** ===================================================================
+**     Event       :  FRTOS1_vApplicationMallocFailedHook (module Events)
+**
+**     Component   :  FRTOS1 [FreeRTOS]
+**     Description :
+**         If enabled, the RTOS will call this hook in case memory
+**         allocation failed.
+**     Parameters  : None
+**     Returns     : Nothing
+** ===================================================================
+*/
+void vApplicationMallocFailedHook(void)
+{
+  /* Called if a call to pvPortMalloc() fails because there is insufficient
+     free memory available in the FreeRTOS heap.  pvPortMalloc() is called
+     internally by FreeRTOS API functions that create tasks, queues, software
+     timers, and semaphores.  The size of the FreeRTOS heap is set by the
+     configTOTAL_HEAP_SIZE configuration constant in FreeRTOSConfig.h. */
+  taskDISABLE_INTERRUPTS();
+  /* Write your code here ... */
+  for(;;) {}
+}
+
 #endif

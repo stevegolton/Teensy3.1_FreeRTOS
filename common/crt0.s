@@ -32,11 +32,11 @@ __interrupt_vector_table:
 	.long 0
 	.long 0
 	.long 0
-	.long SVC_Handler
+	.long vPortSVCHandler
 	.long DebugMon_Handler
 	.long 0
-	.long PendSV_Handler
-	.long SysTick_Handler
+	.long xPortPendSVHandler
+	.long xPortSysTickHandler
 
 /* The following set of vectors are specific to the Kinetis MK20DD256 devices */
 
