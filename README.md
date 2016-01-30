@@ -8,6 +8,15 @@ The FreeRTOS files are available for download from their site and forms the bulk
 I used the [this tutorial](http://rishifranklin.blogspot.co.uk/2014/03/freertos-on-teensy-31.html) as a rough guide to modify the bare metal code to run FreeRTOS. It is targeted at the TeensyDuino environment but could be applied to my bare metal code pretty easily. I copied the FreeRTOSConfig.h pretty much verbatim.
 
 ## Files
+ - Taken or barely modified from http://www.seanet.com/~karllunt/bareteensy31.html
+  - crt0.o
+  - Makefile
+  - main.c
+  - sysinit.c
+  - common.h
+  - arm_cm4.c
+  - Teensy31_flash.ld
+  - <assosiated header files>
  - FreeRTOSV8.2.3 common code
   - croutine.c
   - event_groups.c
@@ -16,12 +25,12 @@ I used the [this tutorial](http://rishifranklin.blogspot.co.uk/2014/03/freertos-
   - tasks.c
   - timers.c
   - <assosiated header files>
-MemMang
+ - MemMang
   - heap_2.c
-GCC/ARM_CM3
+ - GCC/ARM_CM3
   - port.c
   - portmacro.h
-https://github.com/circuitsenses/Teensy-3.1-FreeRTOS
+ - https://github.com/circuitsenses/Teensy-3.1-FreeRTOS
   - FreeRTOSConfig.h
   
 ## Build
