@@ -1,5 +1,5 @@
 #  Project Name
-PROJECT=blinky
+PROJECT=freertos_example
 
 #  Type of CPU/MCU in target hardware
 CPU = cortex-m4
