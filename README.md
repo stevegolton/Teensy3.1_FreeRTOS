@@ -16,7 +16,7 @@ I used the [this tutorial](http://rishifranklin.blogspot.co.uk/2014/03/freertos-
   - common.h
   - arm_cm4.c
   - Teensy31_flash.ld
-  - <assosiated header files>
+  - assosiated header files...
  - FreeRTOSV8.2.3 common code
   - croutine.c
   - event_groups.c
@@ -24,7 +24,7 @@ I used the [this tutorial](http://rishifranklin.blogspot.co.uk/2014/03/freertos-
   - queue.c
   - tasks.c
   - timers.c
-  - <assosiated header files>
+  - assosiated header files...
  - MemMang
   - heap_2.c
  - GCC/ARM_CM3
