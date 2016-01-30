@@ -65,7 +65,7 @@ INCDIRS += -I./freertos/portable
 
 
 # Name and path to the linker script
-LSCRIPT = $(TEENSY3X_BASEPATH)/common/Teensy31_flash.ld
+LSCRIPT = $(TEENSY3X_BASEPATH)/Teensy31_flash.ld
 
 
 OPTIMIZATION = 0
