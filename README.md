@@ -1,5 +1,5 @@
 # TeensyFreeRTOS
-Bare metal FreeRTOS for the Teensy 3.1.
+Minimal FreeRTOS for the Teensy 3.1.
 
 The bare metal code was taken pretty much verbatim from [this tutorial](http://www.seanet.com/~karllunt/bareteensy31.html). I strongly recommend reading this tutorial as it's very well written and contains an extraordinary amount of information. I would also recommend taking some time to read through the code as it is very well commented and provided me a great insight into how the MCU works.
 
